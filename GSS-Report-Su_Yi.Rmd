@@ -4,7 +4,7 @@ author: "Yi Su"
 date: "10/10/2020"
 output: pdf_document
 ---
-### Do people above age of 30 with higher income more likely to be married or has married, comparing to those with lower income in Canada?
+### Do people above age of 30 with higher income more likely to be married or has married, comparing to those with lower income in Canada? And how would age and location affect it?
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 ###The code in this code chunk are created by Rohan Alexander and Sam Caetano with Licence: MIT. 
@@ -327,7 +327,7 @@ library(naniar)
 MarIA <- gss%>%filter(age >= 30)
 ## To get the set of only people with age more or equal to 30
 ## age of 30 avoids part of the potential bias that younger might be associated with lower income and not married.
-MarIA <- MarIA%>%select(age, marital_status, income_respondent)
+MarIA <- MarIA%>%select(age, marital_status, income_respondent, pop_center)
 MarIA <- MarIA%>%replace_with_na(replace = list(marital_status = "NA"))
 MarIA <- MarIA%>%na.omit()
 ## To get only the variables we are interested in
@@ -336,6 +336,8 @@ MarIA <- MarIA%>%transform(ever_married = ifelse(marital_status =="Single, never
 ## relationship, thus living common-law is defined as married here for 
 ## having a conjugal relationship.
 MarIA$income_respondent_f <- factor(MarIA$income_respondent)
+MarIA$pop_center_f <- factor(MarIA$pop_center)
+## factorize these categorical variable for dummy variable coding
 summary(MarIA)
 MarIA%>%count(income_respondent)
 ```
@@ -345,7 +347,7 @@ library(rstan)
 library(brms)
 ## we set the priors for the parameters as normal since they are expected to be 0 by null hypothesis and can be positive or negative, and prior variance of 10 is to make the prior non-informative.
 ## the residual variance, because in the logistic model, this is the constant π^2/3.
-fit1 <- brm(ever_married~age+income_respondent_f, 
+fit1 <- brm(ever_married~age+income_respondent_f+pop_center_f, 
             data = MarIA, 
             family = bernoulli(),
             prior = set_prior("normal(0,1)", class="b"),
