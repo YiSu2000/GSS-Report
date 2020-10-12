@@ -4,10 +4,7 @@ author: "Yi Su"
 date: "10/10/2020"
 output: pdf_document
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+### Do people above age of 30 with higher income more likely to be married or has married, comparing to those with lower income in Canada?
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 ###The code in this code chunk are created by Rohan Alexander and Sam Caetano with Licence: MIT. 
@@ -323,7 +320,35 @@ gss <- gss %>%
   )) 
 
 write_csv(gss, "gss.csv")
-
-
+```
+## Dataset
+```{r}
+library(naniar)
+MarIA <- gss%>%filter(age >= 30)
+## To get the set of only people with age more or equal to 30
+## age of 30 avoids part of the potential bias that younger might be associated with lower income and not married.
+MarIA <- MarIA%>%select(age, marital_status, income_respondent)
+MarIA <- MarIA%>%replace_with_na(replace = list(marital_status = "NA"))
+MarIA <- MarIA%>%na.omit()
+## To get only the variables we are interested in
+MarIA <- MarIA%>%transform(ever_married = ifelse(marital_status =="Single, never married", yes = "No", no = "Yes"))
+## Here, we only care if they have ever married or in a conjugal 
+## relationship, thus living common-law is defined as married here for 
+## having a conjugal relationship.
+MarIA$income_respondent_f <- factor(MarIA$income_respondent)
+summary(MarIA)
+MarIA%>%count(income_respondent)
+```
+## Model
+```{r}
+library(rstan)
+library(brms)
+fit1 <- brm(ever_married~age+income_respondent_f, 
+            data = MarIA, 
+            family = bernoulli(),
+            seed = 416)
+## using dummy variable coding to income_respondent_f
+summary(fit1)
+mcmc_plot(fit1, type = "trace")
 ```
 
