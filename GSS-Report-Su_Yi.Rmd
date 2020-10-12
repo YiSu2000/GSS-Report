@@ -343,12 +343,20 @@ MarIA%>%count(income_respondent)
 ```{r}
 library(rstan)
 library(brms)
+## we set the priors for the parameters as normal since they are expected to be 0 by null hypothesis and can be positive or negative, and prior variance of 10 is to make the prior non-informative.
+## the residual variance, because in the logistic model, this is the constant π^2/3.
 fit1 <- brm(ever_married~age+income_respondent_f, 
             data = MarIA, 
             family = bernoulli(),
+            prior = set_prior("normal(0,1)", class="b"),
             seed = 416)
 ## using dummy variable coding to income_respondent_f
 summary(fit1)
 mcmc_plot(fit1, type = "trace")
+```
+```{r}
+rstan_gg_options(fill = "skyblue", color = "skyblue4", pt_color = "red")
+stanplot(fit1, type="dens" )+
+  ggtitle("Posterior Density")
 ```
 
