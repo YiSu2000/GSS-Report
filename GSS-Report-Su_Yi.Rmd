@@ -14,6 +14,8 @@ output: pdf_document
 library(janitor)
 library(tidyverse)
 gss <- read_csv("gss.csv")
+load("workspace1.RData")
+###Load work space to save the run time for brm models.
 ```
 ## Dataset
 ```{r}
