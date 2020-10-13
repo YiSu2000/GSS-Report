@@ -324,6 +324,8 @@ write_csv(gss, "gss.csv")
 ## Dataset
 ```{r}
 library(naniar)
+library(caTools)
+library(caret)
 MarIA <- gss%>%filter(age >= 30)
 ## To get the set of only people with age more or equal to 30
 ## age of 30 avoids part of the potential bias that younger might be associated with lower income and not married.
@@ -331,34 +333,75 @@ MarIA <- MarIA%>%select(age, marital_status, income_respondent, pop_center)
 MarIA <- MarIA%>%replace_with_na(replace = list(marital_status = "NA"))
 MarIA <- MarIA%>%na.omit()
 ## To get only the variables we are interested in
-MarIA <- MarIA%>%transform(ever_married = ifelse(marital_status =="Single, never married", yes = "No", no = "Yes"))
+MarIA <- MarIA%>%transform(ever_married = ifelse(marital_status =="Single, never married", yes = 0, no = 1))
 ## Here, we only care if they have ever married or in a conjugal 
 ## relationship, thus living common-law is defined as married here for 
-## having a conjugal relationship.
+## having a conjugal relationship. 1 stands for married at least once, 0 stands for never.
 MarIA$income_respondent_f <- factor(MarIA$income_respondent)
 MarIA$pop_center_f <- factor(MarIA$pop_center)
 ## factorize these categorical variable for dummy variable coding
 summary(MarIA)
-MarIA%>%count(income_respondent)
+size <- floor(0.80*nrow(MarIA))
+set.seed(4162)
+t <- sample(seq_len(nrow(MarIA)), size = size)
+train <- MarIA[t,]
+test <- MarIA[-t,]
 ```
 ## Model
 ```{r}
 library(rstan)
 library(brms)
+library(bayesplot)
 ## we set the priors for the parameters as normal since they are expected to be 0 by null hypothesis and can be positive or negative, and prior variance of 10 is to make the prior non-informative.
+## for intercept, use 
 ## the residual variance, because in the logistic model, this is the constant π^2/3.
 fit1 <- brm(ever_married~age+income_respondent_f+pop_center_f, 
-            data = MarIA, 
-            family = bernoulli(),
-            prior = set_prior("normal(0,1)", class="b"),
+            data = train, 
+            family = bernoulli(link = "logit"),
+            prior = c(set_prior("normal(0,10)", class = "b"),
+                                set_prior("normal(0,10)", class = "Intercept")),
             seed = 416)
-## using dummy variable coding to income_respondent_f
+## using dummy variable coding(by default) to income_respondent_f and pop_center_f
 summary(fit1)
 mcmc_plot(fit1, type = "trace")
+##trace plot of each beta
 ```
 ```{r}
+##density plot of each beta's posterior
 rstan_gg_options(fill = "skyblue", color = "skyblue4", pt_color = "red")
 stanplot(fit1, type="dens" )+
   ggtitle("Posterior Density")
+```
+```{r}
+##Credible interval at 95% for each beta
+stanplot(fit1, pars = "^b", type = "intervals", ci_level = 0.95)+
+  ggtitle("95% Credible Intervals for fixed effects")
+```
+```{r message=FALSE, warning=FALSE}
+library(loo)
+library(future)
+plan(multiprocess)
+kf <- kfold(fit1, K = 10, save_fits = TRUE, chains = 1)
+## chains = 1 and parallel to save runtime
+rmse <- function(y, yrep) {
+yrep_mean <- colMeans(yrep)
+sqrt(mean((yrep_mean - y)^2))
+}
+kfp <- kfold_predict(kf)
+rmse(y = kfp$y, yrep = kfp$yrep)
+```
+
+```{r}
+library(pROC)
+Pred <- predict(fit1, newdata = test)
+Pred <- data.frame(Pred)
+rocC <- roc(test$ever_married, Pred$Estimate, 
+            plot = TRUE, 
+            legacy.axes=TRUE,
+            xlab="False Positive Percentage", 
+            ylab="True Postive Percentage",
+            
+            lwd = 2,
+            print.auc = TRUE)
 ```
 
