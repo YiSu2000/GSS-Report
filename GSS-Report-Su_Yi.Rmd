@@ -3,25 +3,51 @@ title: "GSS-Report-Yi-Su"
 author: "Yi Su"
 date: "10/10/2020"
 output: pdf_document
+abstract: "This report focuses on the impact of income level, age, and location on marital status. Although it is expected that marital status should not be causal with these variables, it could be shown that the logit probability of having or has a conjugal relationship is correlated with them. A Bayesian hierarchical logistic regression model was fitted, using the 'brms' package in R, from data collected by the General Social Survey-Family which was designed and conducted by Statistics Canada in 2017. Although some constraints and limitations exist, the finding suggests that higher income levels do come with higher odd of married at least once before, and so does age. Meanwhile living in the less populated area comes with higher odd in married."
 ---
-### Do people above age of 30 with higher income more likely to be married or has married, comparing to those with lower income in Canada? And how would age and location affect it?
 
-### Introduction
-```{r message=FALSE, warning=FALSE, include=FALSE}
+# Introduction
+
+Marriage is the recognized union of two people in a personal relationship. This personal relationship is often considered as purely emotional and not considered as something not predictable by other factors in modern society. However, this does not mean one can not assess the probability of being married/in a conjugal relationship or at least married once, based on real-world cases. In this report, we focus on assessing any potential impact on marital status due to age, income level, and population density in the region of residence. 
+
+First of all, the support of a real-world dataset is essential. The General Social Survey (GSS) - Family is an interview survey conducted every 5 years by Statistics Canada. This family theme survey was designed to monitor changes in Canadian families, and the information collected may show an impact on programs and policies like parental benefits. The GSS- Family-2017 dataset is a cross sectional set focusing on family information such as conjugal relationship, household status, parental history, and family income level, as well as general sociodemographic information like age, education, and citizen status. 
+
+In order to assess the potential impact, a Bayesian hierarchical logistic regression model was fitted onto the GSS dataset. (Thankful to R and R package ‘brms’.) Even though the results of the model are not perfect, it gave some decent directions to the potential impact. Income level appears in a positive correlation with marital status and so does age. Meanwhile, the population density appears in a negative correlation with marital status. Does this answer the question? Not perfectly, but it provides more understanding of the situation. In fact, the probability of ever got married would never be modeled perfectly due to its emotional nature. In order to improve the model, the next step might be adding more predictors, and in that case, the GSS dataset does not provide more good predictors of marital status because of the nature of family theme. All detail on coding of the results can be found at: https://github.com/YiSu2000/GSS-Report/blob/master/GSS-Report-Su_Yi.Rmd
+
+# Data
+
+The 2017 General Social Survey (GSS) - Family survey dataset targeted the population of all Canadian citizens at the age of 15 or older, but excluding residents of the Yukon, Northwest Territories, and Nunavut, and all full-time residents of institutions. Statistics Canada used a stratified simple random sampling without replacement sample strategy. Specifically, a list of telephone numbers in use, from providers like cell phone companies and census, was linked to the address register, and each stratum was designed based on geographic location. About 86% of the phone numbers were successfully linked to an address. If an address was linked to multiple numbers, the first phone number linked, by chronological order, will be chosen. The surveying took the form of a phone call. If there are multiple participants within a household, the person picking up the call should complete the survey. To improve the response rate, numerous attempts were made to unanswered phone numbers and people who refused the first call. The target sample size was 20,000 while the actual number of respondents was 20,602, with a response rate of 52.4% which is good enough for a survey of this sample size. More detail on the methodology of the GSS survey can be found at the Statistics Canada website which is linked in the appendix.
+
+Reliability of the truth value is one of the strengths of the GSS dataset, since it is conducted and designed by Statistics Canada, the chance of getting fraud responses should be lower than surveys conducted privately. Notice that the GSS survey is a weighted survey intended for all populations of Canada, but this feature would not be so important to the interest of this report. Another strength of the GSS is the ability to compare data from this survey cycle to a previous one. The 2017 GSS family survey is the 31st cycle, and one can compare this to the earlier cycles as a pooled cross-sectional data to assess changes of social or family behavior over time. However, this feature would not be used for this report.
+
+The largest limitation of the GSS dataset on evaluating change over time is that the observations are not comparable at an individual level due to the protection of respondent privacy. This is not impactful to this report but might be a constraint for the evaluation of change over time.
+
+For this report, the link to the survey question on marital status, age, income level, and residential population density is given in the appendix. Notice that marital status and income level are derived variable based on a series of questions. While age is a direct result start from 15 and capped at 80, all respondents at age of 80 or more will be classified as 80. The residential population density is decided based on the address register and classified as living in urban areas, rural areas, and Prince Edward Island (PEI). The questions were designed carefully to not offending the respondent and giving respondents the choice of skipping. However, there are multiple derived variables other than marital status and income level, meaning the number of questions might be overwhelming for respondents, and thus endangering the response rate and correctness of responses.
+
+Data cleaning of the raw dataset from Statistics Canada was done thanks to the data cleaning code created by Rohan Alexander and Sam Caetano. To choose only the observations we are interested in, all observations under the age of 30 are excluded from the data. This filtering is to prevent the potential bias of relation between age and income level since the younger population does have a lower income level on average. Setting the sample population to only people above 30 should eliminate a large part of the bias. 
+
+For the next step, a dummy variable was created based on the marital status of each respondent, with 1 as married at least once, and 0 as never married before. Notice that living common-law is defined as married here, since living common-law is defined as a conjugal relationship by the government of Canada, and it can be considered as married on an emotional basis. The dataset is then separated into a test set and train set. The train set contains 80% of the original dataset that was randomly selected, and the test set contains the remaining 20%. This separation of the dataset is essential for cross-validation, which would help assess the quality of the regression model. 
+
+```{r,echo = FALSE, message=FALSE, warning=FALSE, include=FALSE}
 ###The gss.csv file were created using code by Rohan Alexander and Sam Caetano with Licence: MIT. 
 ###The original code by Rohan Alexander and Sam Caetano are included in the github repo file "Prerequisite".
 #### Workspace set-up ####
 library(janitor)
 library(tidyverse)
+library(dplyr)
+library(knitr)
+library(pROC)
+library(loo)
+library(future)
 gss <- read_csv("gss.csv")
 load("workspace1.RData")
 ###Load work space to save the run time for brm models.
-```
-## Dataset
-```{r}
 library(naniar)
 library(caTools)
 library(caret)
+library(rstan)
+library(brms)
+library(bayesplot)
 MarIA <- gss%>%filter(age >= 30)
 ## To get the set of only people with age more or equal to 30
 ## age of 30 avoids part of the potential bias that younger might be associated with lower income and not married.
@@ -30,8 +56,8 @@ MarIA <- MarIA%>%replace_with_na(replace = list(marital_status = "NA"))
 MarIA <- MarIA%>%na.omit()
 ## To get only the variables we are interested in
 MarIA <- MarIA%>%transform(ever_married = ifelse(marital_status =="Single, never married", yes = 0, no = 1))
-## Here, we only care if they have ever married or in a conjugal 
-## relationship, thus living common-law is defined as married here for 
+## Here, we only care if they have ever married/in a conjugal 
+## relationship, thus living common-law is defined as married here for
 ## having a conjugal relationship. 1 stands for married at least once, 0 stands for never.
 MarIA$income_respondent_f <- factor(MarIA$income_respondent)
 MarIA$pop_center_f <- factor(MarIA$pop_center)
@@ -43,39 +69,44 @@ t <- sample(seq_len(nrow(MarIA)), size = size)
 train <- MarIA[t,]
 test <- MarIA[-t,]
 ```
-## Model
-```{r}
-library(rstan)
-library(brms)
-library(bayesplot)
+# Model
+A Bayesian hierarchical binary logistic regression was fitted on the training dataset. Binary logistic regression is the appropriate regression for the binary dummy variable on ever got married before, it models the logit probability of got married before. There are be eight regressors in this model, one for age, five for the six levels of income, and two for the three levels of population density. Income level and residential population density both have one less regressor than their categorical level because of the dummy variable coding. The one level without a regressor shows implicitly when all other regressors for the variable equal 0. In this case, the interpretation of $\beta$s would be different, it now represents the estimated difference in the response variable of the regressor level to the one level without a regressor.
+
+The model may be expresses as:
+$$\log(\frac{p_{i}}{1-p_{i}}) = \beta_{0}+\sum_{i=1}^{8} \beta_{i}x_{i}$$
+With Prior:
+$$\beta\sim {Normal}(0, 10)$$
+
+A global non-informative prior distribution of N(0,10) was set to the parameters and the intercept. The reason for choosing a normal prior is that it is expected that the parameters can be negative or positive with equal probability, the mean 0 represents the null hypothesis of zero effect on the response variable and a variance of 10 makes the prior non-information. The model was fitted using the ‘brms’ package in R, essentially bring the merit of Stan using simple R syntax and through similar algorithms like Markov chain Monte Carlo (MCMC).
+```{r message=FALSE,results='hide', warning=FALSE, ,echo=FALSE, error = FALSE}
 ## we set the priors for the parameters as normal since they are expected to be 0 by null hypothesis and can be positive or negative, and prior variance of 10 is to make the prior non-informative.
 ## for intercept, use 
-## the residual variance, because in the logistic model, this is the constant π^2/3.
+## the residual variance, because in the logistic model, this is the constant pi^2/3.
 fit1 <- brm(ever_married~age+income_respondent_f+pop_center_f, 
             data = train, 
             family = bernoulli(link = "logit"),
             prior = c(set_prior("normal(0,10)", class = "b"),
                                 set_prior("normal(0,10)", class = "Intercept")),
-            seed = 416)
+            seed = 416,
+            silent = TRUE,
+            refresh = 0)
 ## using dummy variable coding(by default) to income_respondent_f and pop_center_f
 summary(fit1)
 mcmc_plot(fit1, type = "trace")
 ##trace plot of each beta
 ```
-```{r}
+```{r, echo = FALSE, cache = TRUE}
 ##density plot of each beta's posterior
-rstan_gg_options(fill = "skyblue", color = "skyblue4", pt_color = "red")
 stanplot(fit1, type="dens" )+
   ggtitle("Posterior Density")
 ```
-```{r}
+```{r,echo = FALSE, cache = TRUE}
 ##Credible interval at 95% for each beta
 stanplot(fit1, pars = "^b", type = "intervals", ci_level = 0.95)+
   ggtitle("95% Credible Intervals for fixed effects")
 ```
-```{r message=FALSE, warning=FALSE}
-library(loo)
-library(future)
+
+```{r,cahce = TRUE,echo = FALSE, message=FALSE, warning=FALSE}
 plan(multiprocess)
 kf <- kfold(fit1, K = 10, save_fits = TRUE, chains = 1)
 ## chains = 1 and parallel to save runtime
@@ -83,12 +114,12 @@ rmse <- function(y, yrep) {
 yrep_mean <- colMeans(yrep)
 sqrt(mean((yrep_mean - y)^2))
 }
+## rmse code from 'brms' CRAN user reference in CRAN
 kfp <- kfold_predict(kf)
 rmse(y = kfp$y, yrep = kfp$yrep)
 ```
 
-```{r}
-library(pROC)
+```{r, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
 Pred <- predict(fit1, newdata = test)
 Pred <- data.frame(Pred)
 rocC <- roc(test$ever_married, Pred$Estimate, 
