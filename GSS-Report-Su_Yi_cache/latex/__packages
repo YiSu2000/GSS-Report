@@ -22,3 +22,5 @@ knitr
 pROC
 loo
 future
+olsrr
+broom.mixed
