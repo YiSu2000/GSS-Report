@@ -96,7 +96,9 @@ $$\log(\frac{p_{i}}{1-p_{i}}) = \beta_{0}+\sum_{i=1}^{8} \beta_{i}x_{i}$$
 * With Prior, for j from 0 to 8:
 $$\beta_{j}\sim {Normal}(0, 10)$$
 
-A global non-informative prior distribution of N(0,10) was set to the parameters and the intercept. The reason for choosing a normal prior is that it is expected that the parameters can be negative or positive with equal probability, the mean 0 represents the null hypothesis of zero effect on the response variable and a variance of 10 makes the prior non-information. The model was fitted using the ‘brms’ package in R, essentially bring the merit of Stan using simple R syntax and through similar algorithms like Markov chain Monte Carlo (MCMC). 4 chains and 1000 iteration (not including warm up) were used to fit the model with the help of 'brms'. 
+A global non-informative prior distribution of N(0,10) was set to the parameters and the intercept. The reason for choosing a normal prior is that it is expected that the parameters can be negative or positive with equal probability, the mean 0 represents the null hypothesis of zero effect on the response variable and a variance of 10 makes the prior non-information. Since the residual variance for logistic regression is the constant $\frac{\pi^{2}}{3}$, there's no need for a prior on it.
+
+The model was fitted using the ‘brms’ package in R, essentially bring the merit of Stan using simple R syntax and through similar algorithms like Markov chain Monte Carlo (MCMC). 4 chains and 1000 iteration (not including warm up) were used to fit the model with the help of 'brms'. 
 
 Although the marital status and residential population density provided lots of variables, a total of 8 explanatory variable is still far from any potential overfitting problem due to too many variables. Although non-informative prior does not help to deal with separation, it is expected that the variables in this model should not generate perfect prediction to the response variable. Thus no complete or quasi-complete separation should exist since most variables are dummy variables, and the results from the model supports this expectation for convergence.
 
