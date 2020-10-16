@@ -1,9 +1,9 @@
 ---
-title: "Bayesian Logistic Regression model on Marital Status using the 2017 GSS Dataset"
+title: "Predict Marital Status using a Bayesian Logistic Regression Model with the 2017 GSS Dataset"
 author: "Yi Su"
 date: "10/15/2020"
 output: pdf_document
-abstract: "This report focuses on the impact of income level, age, and location on marital status. Although it is expected that marital status should not be causal with these variables, it could be shown that the logit probability of having or has a conjugal relationship is correlated with them. A Bayesian binary logistic regression model was fitted, using the 'brms' package in R, from data collected by the General Social Survey-Family which was designed and conducted by Statistics Canada in 2017. Even though the resultant model may not be very strong, the finding suggests that higher income levels do come with higher odd of married at least once before, and so does age. Meanwhile living in the less populated area comes with higher odd in married."
+abstract: "This report focuses on the impact of income level, age, and residence location on marital status. Although it is expected that marital status should not be causal with these variables, it could be shown that the logit probability of having or has a conjugal relationship is correlated with them. A Bayesian binary logistic regression model was used to provide the results, using the 'brms' package in R, from data collected by the General Social Survey-Family which was designed and conducted by Statistics Canada in 2017. Even though the resultant model may not be very strong, the finding suggests that higher income levels do come with higher odd of married at least once before, and so does age. Meanwhile living in the less populated area comes with higher odd in married."
 ---
 
 # 1. Introduction
@@ -12,12 +12,14 @@ Marriage is the recognized union of two people in a personal relationship. This 
 
 First of all, the support of a real-world dataset is essential. The General Social Survey (GSS) - Family is an interview survey conducted every 5 years by Statistics Canada. This family theme survey was designed to monitor changes in Canadian families, and the information collected may show an impact on programs and policies like parental benefits. The GSS- Family-2017 dataset is a cross sectional set focusing on family information such as conjugal relationship, household status, parental history, and family annual income level, as well as general sociodemographic information like age, education, and citizen status. 
 
-In order to assess the potential impact, a Bayesian binary logistic regression model was fitted onto the GSS dataset. (Thankful to R and R package ‘brms’.) Even though the results of the model are not perfect, it gave some decent directions to the potential impact. Annual Income level appears in a positive correlation with marital status and so does age. Meanwhile, the population density appears in a negative correlation with marital status. Does this answer the question? Not perfectly, but it provides more understanding of the situation. In fact, the probability of ever got married would never be modeled perfectly due to its emotional nature. In order to improve the model, the next step might be adding more predictors, and in that case, the GSS dataset does not provide more good predictors of marital status because of the nature of family theme. All detail on coding of the results can be found at: https://github.com/YiSu2000/GSS-Report/blob/master/GSS-Report-Su_Yi.Rmd
+In order to assess the potential impact, a Bayesian binary logistic regression model was fitted onto the GSS dataset. (Thankful to R and R package ‘brms’.) Even though the results of the model are not perfect, it gave some decent directions to the potential impact. Annual Income level appears in a positive correlation with marital status and so does age. Meanwhile, the population density appears in a negative correlation with marital status. 
+
+Does this model answer the question? Not perfectly, but it provides more understanding of the situation. In fact, the probability of ever got married would never be modeled perfectly due to its emotional nature. In order to improve the model, the next step might be adding more predictors, and in that case, the GSS dataset does not provide more good predictors of marital status because of the nature of family theme. Overall, the results are beneficial for future improvements on predicting marital status. All the detailed coding and data realted to these results can be found at: https://github.com/YiSu2000/GSS-Report/blob/master/GSS-Report-Su_Yi.Rmd.
 
 ```{r,echo = FALSE, message=FALSE, warning=FALSE, include=FALSE}
 ###The gss.csv file were created using code by Rohan Alexander and Sam Caetano with License: MIT. 
 ###The original code by Rohan Alexander and Sam Caetano are included in the github repo file "Prerequisite" and referenced in the end
-#### Workspace set-up ####
+# Package loading
 library(janitor)
 library(tidyverse)
 library(dplyr)
@@ -35,28 +37,36 @@ library(rstan)
 library(brms)
 library(bayesplot)
 library(broom.mixed)
+
 MarIA <- gss%>%filter(age >= 30)
 ## To get the set of only people with age more or equal to 30
 ## age of 30 avoids part of the potential bias that younger might be associated with lower income and not married.
+
 MarIA <- MarIA%>%select(age, marital_status, income_respondent, pop_center)
 MarIA <- MarIA%>%replace_with_na(replace = list(marital_status = "NA"))
 MarIA <- MarIA%>%na.omit()
 ## To get only the variables we are interested in
+
 MarIA <- MarIA%>%transform(ever_married = ifelse(marital_status =="Single, never married", yes = 0, no = 1))
 MarIA <- MarIA%>%transform(ever_married_f = ifelse(marital_status =="Single, never married", yes = "no", no = "yes"))
 ## Here, we only care if they have ever married/in a conjugal 
 ## relationship, thus living common-law is defined as married here for
 ## having a conjugal relationship. 1 stands for married at least once, 0 stands for never.
+
 MarIA$income_respondent_f <- factor(MarIA$income_respondent)
 MarIA$pop_center <- as.character(MarIA$pop_center)
 MarIA$pop_center[MarIA$pop_center == "Rural areas and small population centres (non CMA/CA)"] <- "Low population"
+## changing the overwhelming to long name for variable
+
 MarIA$pop_center_f <- factor(MarIA$pop_center)
 ## factorize these categorical variable for dummy variable coding
+
 size <- floor(0.80*nrow(MarIA))
 set.seed(4162)
 t <- sample(seq_len(nrow(MarIA)), size = size)
 train <- MarIA[t,]
 test <- MarIA[-t,]
+# dividing the dataset into test and train set by random sampling without replacement.
 ```
 
 # 2. Framework of GSS
@@ -67,7 +77,7 @@ Reliability of the truth value is one of the strengths of the GSS dataset, since
 
 The largest limitation of the GSS dataset on evaluating change over time is that the observations are not comparable at an individual level due to the protection of respondent privacy. This is not impactful to this report but might be a constraint for the evaluation of change over time.
 
-The link to the survey question on marital status, age, annual income level, and residential population density is given in the appendix. Notice that marital status and income level are derived variable based on a series of questions. While age is a direct result start from 15 and capped at 80, all respondents at age of 80 or more will be classified as 80. The residential population density is decided based on the address register and classified as living in urban areas, rural areas, and Prince Edward Island (PEI). The questions were designed carefully to not offending the respondent and giving respondents the choice of skipping. However, there are multiple derived variables other than marital status and annual income level, meaning the number of questions might be overwhelming for respondents, and thus endangering the response rate and correctness of responses.
+The link to the survey question on marital status, age, annual income level, and residential population density is given in the appendix. Notice that marital status and income level are derived variable based on a series of questions. While age is a direct result start from 15 and capped at 80, all respondents at age of 80 or more will be classified as 80. The residential population density is decided based on the address register and classified as living in large population centers, small/low population center, and Prince Edward Island (PEI). The questions were designed carefully to not offending the respondent and giving respondents the choice of skipping. However, there are multiple derived variables other than marital status and annual income level, meaning the number of questions might be overwhelming for respondents, and thus endangering the response rate and correctness of responses.
 
 # 3. Data
 
@@ -89,45 +99,53 @@ library(data.table)
 nset <- setDT(test)[,list(count = .N), by = .(ever_married_f,income_respondent_f)][,list(income_respondent_f = income_respondent_f, count = count, percent_fmt = paste0(formatC(count*100/sum(count), digits = 3), "%"),percent_num = count/sum(count)), by = ever_married_f]
 
 nset2 <- setDT(test)[,list(count = .N), by = .(ever_married_f,pop_center_f)][,list(pop_center_f = pop_center_f, count = count, percent_fmt = paste0(formatC(count*100/sum(count), digits = 3), "%"),percent_num = count/sum(count)), by = ever_married_f]
+# the percentage dataset used in the labeling of figure 1 and 2
 
 nset%>%
   ggplot(aes(x = ever_married_f, 
              y = percent_num,
              fill = factor(income_respondent_f, levels = c("Less than $25,000", "$25,000 to $49,999", "$50,000 to $74,999", "$75,000 to $99,999", "$100,000 to $ 124,999","$125,000 and more"))))+
-  geom_bar(position = position_fill(reverse=FALSE), stat = "identity")+
-  geom_text(aes(label = percent_fmt),position = position_stack(vjust = 0.5), )+
+  geom_bar(position = position_fill(reverse=FALSE), 
+           stat = "identity")+
+  geom_text(aes(label = percent_fmt),
+            position = position_stack(vjust = 0.5) )+
   scale_fill_discrete(name = "Income level of respondent")+
   labs(title = "Figure 1: percentage of income level among respondents")+
   xlab(label = "Have married or is married")+
   ylab(label = "Percentage")+
   coord_flip()+
-  theme(legend.position="bottom", legend.justification='left')+
+  theme(legend.position="bottom", 
+        legend.justification='left')+
   guides(fill = guide_legend(nrow = 3, byrow = TRUE))
 
 nset2%>%
   ggplot(aes(x = ever_married_f, 
              y = percent_num,
              fill = pop_center_f))+
-  geom_bar(position = position_fill(reverse=FALSE), stat = "identity")+
-  geom_text(aes(label = percent_fmt),position = position_stack(vjust = 0.5), )+
+  geom_bar(position = position_fill(reverse=FALSE), 
+           stat = "identity")+
+  geom_text(aes(label = percent_fmt),
+            position = position_stack(vjust = 0.5) )+
   scale_fill_discrete(name = "Residential population density")+
   labs(title = "Figure 2: percentage of residential population density among respondents")+
   xlab(label = "Have married or is married")+
   ylab(label = "Percentage")+
   coord_flip()+
-  theme(legend.position="bottom", legend.justification='left')+
+  theme(legend.position="bottom", 
+        legend.justification='left')+
   guides(fill = guide_legend(nrow = 3, byrow = TRUE))
 ```
 
 Figure 1 and 2 provides some visualization of the test dataset. Figure 1 shows that ratio of higher level income decrease progressively among samples, no matter the respondent is married or not. Figure 2 shows that the majority of the sample lives in urban environment across both response category. Overall, not much ratio wise difference arise between the married and never married sample. 
 
 # 4. Model
-This report focuses on modeling marital status by age, annual income level, and population density around the residence. Income level and age are natural predictors one can think of when relating to marital status. Higher age often has a higher chance of married or ever married, and a supportive income level is often the foundation of a stable and long term conjugal relationship. Population density around residence potentially affects the number of options or the chance of meeting one's future spouse.  However, the expected direction of the impact of residential population density is unknown since it would be reasonable and arguable both ways.
+This report focuses on modeling marital status by age, annual income level, and population density around the residence. Income level and age are natural predictors one can think of when relating to marital status. Higher age often has a higher chance of married or ever married, and a supportive income level is often the foundation of a stable and long term conjugal relationship. Population density around residence potentially affects the number of options or the chance of meeting one's future spouse.  However, the expected direction of the impact of residential population density is unknown since it would be reasonable and arguable both ways. The levels of the categorical varaibles are followed as in the GSS dataset.
 
-A Bayesian binary logistic regression model was fitted on the training dataset. Binary logistic regression is the appropriate regression for the binary dummy variable on ever got married before, it models the logit probability of got married before. There are be eight explanatory variables in this model, one for age, five for the six levels of income, and two for the three levels of population density. Income level and residential population density both have one less variable than their categorical level because of the dummy variable coding. The one level without a explicit variable appears implicitly when all other variables for the variable equal 0. In this case, the interpretation of $\beta$s would be different, it now represents the estimated difference between the effect of the explicit dummy variable and the implicit dummy variable.
+A Bayesian binary logistic regression model was fitted on the training dataset. Binary logistic regression is the appropriate regression for the binary dummy variable on ever got married before by modeling the logit probability as the response. Although the number of explanatory variables is essentially three, there are more variables in the model due to income level and population density level being dummy variable. There are be eight parameters in this model, one for age, five for the six levels of income, and two for the three levels of population density. Income level and residential population density both have one less variable than their categorical level because of the dummy variable coding. The one level without a explicit variable appears implicitly when all other variables for the variable equal 0. In this case, the interpretation of $\beta$s would be different, it now represents the estimated difference between the effect of the explicit dummy variable and the implicit dummy variable. 
 
 * The model may be expresses as:
 $$\log(\frac{p_{i}}{1-p_{i}}) = \beta_{0}+\sum_{i=1}^{8} \beta_{i}x_{i}$$
+
 * With Prior, for j from 0 to 8:
 $$\beta_{j}\sim {Normal}(0, 10)$$
 
@@ -154,7 +172,7 @@ $Table II:Results$
 |Pop. Dens.:Rural and low population|0.37|0.06|(0.25,0.50)||
 |||||0.3514|
 
-Table I shows the results of the model. The income level of \$ 99,000 to \$ 124,999 is the default dummy variable which appears when all five income variables equal to zero. Similarly, the population density level of Urban and large population centers appears when all two variables for pop. dens. equal to zero. As mentioned before, the estimates for income and pop. dens. variable parameters are interpreted differently from the parameter for age. Root mean squared error (RMSE) is calculated with the formula from 'brms' documentation on CRAN, using a 10 fold cross validation on the test set. The income level parameters tend to have a negative trend for any level below the default and a positive impact if above default. The population density level parameters shows a positive impact on odds of ever got married by living in less populated region.
+Table I shows the results of the model. The income level of \$ 99,000 to \$ 124,999 is the default dummy variable which appears when all five income variables equal to zero. Similarly, the population density level of Urban and large population centers appears when all two variables for pop. dens. equal to zero. As mentioned before, the estimates for income and pop. dens. variable parameters are interpreted differently from the parameter for age. Root mean squared error (RMSE) is calculated with the formula from 'brms' documentation on CRAN, using a 10 fold cross validation on the test set. The income level parameters tend to have a negative trend for any level below the default and a positive impact if above default. The population density level parameters shows a positive impact on the odds of ever got married by living in less populated region.
 
 
 ```{r message=FALSE,results='hide', warning=FALSE, ,echo=FALSE, error = FALSE, fig.show="hold", out.width="80%"}
@@ -170,6 +188,8 @@ fit1 <- brm(ever_married~age+income_respondent_f+pop_center_f,
             silent = TRUE,
             refresh = 0)
 ## using dummy variable coding(by default) to income_respondent_f and pop_center_f
+## setting seed for reproducibility, however, it is not perfect
+
 summary(fit1)
 ```
 
@@ -188,13 +208,13 @@ rmse(y = kfp$y, yrep = kfp$yrep)
 
 mcmc_plot(fit1, type = "trace")+
   labs(title = "Figure 3: Trace plot for the paramteres")
-##trace plot of each beta
+##trace plot of each beta parameter
 ```
 
 Figure 3 shows trace plots in consistent and rapid up-and-down shape with no long term trend. Meaning convergence in distribution happened rapidly and the up-and-down variation shows that the sample values are unrelated to previous ones. As expected, the trace plots shows evidence of convergence in models.
 
 ```{r,echo = FALSE, cache = TRUE, fig.show="hold", out.width="80%"}
-##Credible interval at 95% for each beta
+##Credible interval at 95% for each beta parameter
 mcmc_plot(fit1, pars = "^b", type = "intervals")+
   labs(title = "Figure 4: 95% Credible Intervals for parameters")
 ```
@@ -204,8 +224,11 @@ Figure 4 shows that most estimation of parameters shows a credible interval not 
 ```{r, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.show="hold", out.width="70%"}
 Pred <- predict(fit1, newdata = test)
 Pred <- data.frame(Pred)
+#create prediction dataset
+
 par(pty = "s")
 #making the graph square
+
 rocC <- roc(test$ever_married, Pred$Estimate, 
             plot = TRUE, 
             legacy.axes=TRUE,
@@ -215,21 +238,24 @@ rocC <- roc(test$ever_married, Pred$Estimate,
             lwd = 2,
             print.auc = TRUE,
             percent = TRUE)
+#the ROC curve using pROC package
 ```
 
 Figure 5 shows the receiver operating characteristic (ROC) curve of the model when predicting the test dataset. True positive rate is the rate of successfully predicting the response variable, and false positive rate is the opposite rate. The ROC curve plots the two rates for every possible threshold of identifying the response. For example, if the threshold is 0.5, then all prediction from the model with value more than 0.5 will be classified as 1.
 
 # 6. Discussion and Conclusion
 
-The resultant model may not be ideal and is not a very strong model as indicated by RMSE of 0.35 and the area under the ROC curve of 66% is generally considered poor or moderate. The RMSE of 0.35 is not considered as large since it takes the same unit as the response variable, but it could and should use some improvement. The ROC curve suggests that the optimum choice of true positive rate is around 65% that come with a false positive rate around 40% which is not low at all. Even though these indicators of quality are not in support of the model, the result of the model still provide some solid understanding of what possibly affects marital status and how to make better prediction for future models. 
+The resultant model may not be ideal and is not a very strong model as indicated by RMSE of 0.35 and the area under the ROC curve of 66% is generally considered poor or moderate. The RMSE of 0.35 is not considered as large since it takes the same unit as the response variable, but it could and should use some improvement. The ROC curve suggests that the optimum choice of true positive rate is around 65% that comes with a false positive rate of around 40% which is not low at all. Even though these indicators of quality are not in support of the model, the result of the model still provides some solid understanding of what possibly affects marital status and how to make a better prediction for future models. 
 
-Income level shows both positive and negative impact on odds of ever married as mentioned under Table II. However, it is clear in Figure 4 that the odds of ever married is not as sensitive as expected in response to change in annual income levels. The credible intervals (at level of 5%) of income levels below \$49,999 are mostly overlapped, and this is similar for the income levels between \$50,000 to \$99,999. This is also the same case for the levels of population density. Thus, a reduction in levels of annual income should be appropriate when doing future improvements of the model. For levels of population density, the levels could use some rethinking because it is not a very precise leveling, a numeric version of population density in each city would likely to be the appropriate measure of this variable. However, that involves adding new data into the GSS dataset. 
+Income level shows both positive and negative impacts on the odds of ever-married as mentioned under Table II. However, it is clear in Figure 4 that the odds of ever married is not as sensitive as expected in response to change in annual income levels. The credible intervals (at the level of 5%) of income levels below \$49,999 are mostly overlapped, and this is similar for the income levels between \$50,000 to \$99,999. This is also the same case for the levels of population density. Thus, a reduction in levels of annual income should be appropriate when doing future improvements of the model. For levels of population density, the levels could use some rethinking because it is not a very precise leveling, a numeric version of population density in each city would likely to be the appropriate measure of this variable. However, that involves adding new data into the GSS dataset. 
 
-The residential population density parameter shows the interesting result, the model indicates that odds of ever married is higher when not living in a large population region which is a bit counterintuitive. This could be reasoned as less populated region have a slower life pace in general, which might be in favor of developing a stable personal relationship. Meanwhile urban region with large population may have the opposite effect.
+The residential population density parameter shows an interesting result, the model indicates that the odds of ever married is higher when not living in a large population region which is a bit counterintuitive. This could be reasoned as a less populated region have a slower life pace in general, which might be in favor of developing a stable personal relationship. Meanwhile, the urban region with a large population may have the opposite effect.
 
-In terms of age, it shows a small but consistent and invariant positive impact to odds of ever married.Possible explanation could be that older respondent often has more life experiences, which includes personal relationship experiences. The magnitude of age parameter might look small on it's own, but it is actually a bit larger than expected even with age in our test dataset are ranged from 30 to 80. In compensation, income levels below \$99,999 are all predicted to have a moderate amount of negative impact on odds of ever married, and this impact becomes considerable when below \$25,000. 
+In terms of age, it shows a small but consistent and invariant positive impact on the odds of ever married. A possible explanation could be that older respondent often has more life experiences, which includes personal relationship experiences. The magnitude of age parameter might look small on its own, but it is a bit larger than expected even with age in our test dataset are ranged from 30 to 80. In compensation, income levels below \$99,999 are all predicted to have a moderate amount of negative impact on odds of ever married, and this impact becomes considerable when below \$25,000. 
 
-For further improvement of the model, we can consider other possible predictors such as height, education, citizen status and even self-rated residence tidiness. The choice of new explanatory variable is open as long as it's not in strong linear relationship with the other variables, not a collider of the other variables and reasonable. However, if we are to include any variable not in the GSS dataset then there is the risk which new dataset may not be as reliable as the GSS dataset and exhibits some contradicting pattern. Improvement on the modeling methodology could also be revised, especially on the prior distribution since the use of a global normal non-informative prior on parameters is not very helpful. Some informative priors could be used on different parameters based on the results from the current model like a adjusted t distribution prior.
+For further improvement of the model, we can consider other possible predictors such as height, education, citizen status, and even self-rated residence tidiness. The choice of a new explanatory variable is open as long as it's not in a strong linear relationship with the other variables, not a collider of the other variables, and is reasonable. However, if we are to include any variable, not in the GSS dataset then there is the risk which new dataset may not be as reliable as the GSS dataset and exhibits some contradicting pattern. Improvement of the modeling methodology could also be revised, especially on the prior distribution since the use of a global normal non-informative prior on parameters is not very helpful. Some informative priors could be used on different parameters based on the results from the current model like an adjusted t distribution prior.
+
+The GSS dataset is reliable in terms of a survey design as discussed in section 2, but there are of course limitations to the data. One of the limitations of observations recorded in the GSS dataset is the categorical levels as discussed above. A more accurate prediction might be made by using the numeric version of income and residential population density and even using the logged variables. The underlying bias of the present variables also exist. As mentioned in the data section, age is possibly related to income, and that was why the bottom age was raised to 30 in the modeling dataset. On the other hand, it might be the case that people living in largely populated areas are more likely to find a decent income job. 
 
 As mentioned in the introduction, even with all the good predictors and improved model methodology, marriage prediction models will never be identical to the "true" model since the "residual of emotion" will always exist. Nonetheless, finding the "true" model is not the expectation for most regression models. The direction of future improvement should be providing more informative results while making more precise predictions.
 
